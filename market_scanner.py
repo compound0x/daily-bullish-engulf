@@ -16,7 +16,8 @@ def get_sp500_tickers():
     response = requests.get(url, headers=headers)
 
     # FIX: Wrapped response.text in io.StringIO() to resolve the pandas FutureWarning
-    table = pd.read_html(io.StringIO(response.text))
+    # table = pd.read_html(io.StringIO(response.text))
+    table = pd.read_html(io.StringIO(response.text), flavor='bs4')
 
     df = table[0]
     return df['Symbol'].tolist()
