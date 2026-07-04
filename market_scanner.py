@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 import io  # Added to fix the Pandas read_html FutureWarning
-from IPython.display import display, HTML # Added to render HTML in Colab
+#from IPython.display import display, HTML # Added to render HTML in Colab
 
 def get_sp500_tickers():
     """Automatically grabs the current S&P 500 ticker list from Wikipedia."""
@@ -183,12 +183,13 @@ def generate_html_report(df_results):
     """
 
     # Save to an HTML file so you can download it
-    with open("daily_market_report.html", "w") as file:
+    with open("index.html", "w") as file:
         file.write(html_content)
+    print("✅ Dashboard saved to index.html")
 
     # Render it directly in the Colab/Jupyter Notebook
-    display(HTML(html_content))
-    print("✅ Dashboard generated successfully! You can also download 'daily_market_report.html' from your file explorer.")
+    # display(HTML(html_content))
+    # print("✅ Dashboard generated successfully! You can also download 'daily_market_report.html' from your file explorer.")
 
 # Run the live engine
 tickers_to_scan = get_sp500_tickers()
