@@ -11,7 +11,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0  # This is the key: it downloads the full git history
+          
       - name: Set up Python
         uses: actions/setup-python@v5
         with: {python-version: '3.12'}
@@ -34,6 +36,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
           git add trade_history.json history.html
-          git commit -m "Update trade history"
-          git push
+          
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update trade history" && git push)
