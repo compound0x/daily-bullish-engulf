@@ -10,11 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
-        with: {python-version: '3.9'}
+        uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
 
       - name: Install dependencies
         run: |
@@ -25,7 +25,7 @@ jobs:
         run: python market_scanner.py # This generates your HTML file
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: . # Assuming your script saves the HTML here
