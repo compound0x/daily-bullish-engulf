@@ -1,0 +1,28 @@
+name: Market Scanner
+on:
+  workflow_dispatch: # This adds a "Run Workflow" button in GitHub
+  schedule:
+    - cron: '0 9 * * 1-5' # Runs at 9 AM every weekday
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with: {python-version: '3.9'}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Scanner
+        run: python market_scanner.py # This generates your HTML file
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: . # Assuming your script saves the HTML here
