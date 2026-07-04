@@ -3,7 +3,41 @@ import pandas as pd
 import numpy as np
 import requests
 import io  # Added to fix the Pandas read_html FutureWarning
-#from IPython.display import display, HTML # Added to render HTML in Colab
+import json
+import os
+from datetime import datetime
+
+now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def update_history(new_trade):
+    history_file = "trade_history.json"
+    # Load existing history or create new list
+    if os.path.exists(history_file):
+        with open(history_file, "r") as f:
+            history = json.load(f)
+    else:
+        history = []
+    
+    # Add timestamp and append
+    new_trade['timestamp'] = now
+    history.append(new_trade)
+    
+    with open(history_file, "w") as f:
+        json.dump(history, f, indent=4)
+
+def generate_html_files(current_data, history_data):
+    # --- Generate index.html (Dashboard) ---
+    # (Use your existing logic, just add <h2>Generated at: {now}</h2>)
+    
+    # --- Generate history.html ---
+    history_html = f"<html><body><h1>Trade History</h1><p>Last updated: {now}</p><table>"
+    history_html += "<tr><th>Date</th><th>Ticker</th><th>Entry</th><th>StopLoss</th><th>Target</th></tr>"
+    for trade in reversed(history_data): # Newest first
+        history_html += f"<tr><td>{trade['timestamp']}</td><td>{trade['ticker']}</td><td>{trade['current_price']}</td><td>{trade['cut_loss']}</td><td>{trade['tp2']}</td></tr>"
+    history_html += "</table><a href='index.html'>Back to Dashboard</a></body></html>"
+    
+    with open("history.html", "w") as f:
+        f.write(history_html)
 
 def get_sp500_tickers():
     """Automatically grabs the current S&P 500 ticker list from Wikipedia."""
