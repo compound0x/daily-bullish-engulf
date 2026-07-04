@@ -26,17 +26,15 @@ jobs:
       - name: Run Scanner
         run: python market_scanner.py # This generates your HTML file
 
+      - name: Commit history JSON to main branch
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add trade_history.json history.html
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update trade history" && git push)
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: . # Assuming your script saves the HTML here
-
-      - name: Commit and Push changes
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
-          git add trade_history.json history.html
-          
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update trade history" && git push)
