@@ -26,7 +26,7 @@ def scan_and_rank_market(universe_tickers):
     scored_trades = []
 
     # Limit to top 50 for speed in Colab. Change to universe_tickers to scan all 500.
-    for ticker in universe_tickers[:50]:
+    for ticker in universe_tickers:
         try:
             ticker = ticker.replace('.', '-')
             stock = yf.Ticker(ticker)
