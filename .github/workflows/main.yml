@@ -2,7 +2,7 @@ name: Market Scanner
 on:
   workflow_dispatch: # This adds a "Run Workflow" button in GitHub
   schedule:
-    - cron: '0 9 * * 1-5' # Runs at 9 AM every weekday
+    - cron: '0 0 * * 2-6' # Runs 4h after market close at 00:00 UTC
 permissions: 
   contents: write
 jobs:
