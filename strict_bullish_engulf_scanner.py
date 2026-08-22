@@ -1,5 +1,4 @@
 import io
-import math
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +16,13 @@ MAX_ATR_PCT = 0.08
 MAX_GAP_PCT = 0.03
 MIN_RR = 1.5
 MAX_RISK_PCT = 0.05
+
+
+def normalize_columns(df):
+    """Normalize yfinance columns so Close/Open/etc. are plain columns."""
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    return df
 
 
 def get_sp500_tickers():
@@ -56,21 +62,31 @@ def add_indicators(df):
     return df
 
 
-def get_market_regime():
-    """Classify the broad market using SPY daily trend."""
-    spy = yf.download("SPY", period="1y", interval="1d", auto_adjust=False, progress=False)
+def get_spy_data():
+    spy = yf.download(
+        "SPY", period="1y", interval="1d", auto_adjust=False, progress=False
+    )
     if spy.empty:
+        return spy
+    spy = normalize_columns(spy)
+    spy = spy.dropna(subset=["Close"])
+    return add_indicators(spy)
+
+
+def get_latest_completed_session(spy_df):
+    """Return the latest completed daily US market session available in SPY data."""
+    if spy_df.empty:
+        return None
+    return pd.Timestamp(spy_df.index[-1]).date()
+
+
+def get_market_regime(spy_df):
+    """Classify the broad market using the latest completed SPY session."""
+    if spy_df.empty or len(spy_df) < 200:
         return "UNKNOWN", 0
 
-    if isinstance(spy.columns, pd.MultiIndex):
-        spy.columns = spy.columns.get_level_values(0)
-
-    spy = add_indicators(spy.dropna(subset=["Close"]))
-    if len(spy) < 200:
-        return "UNKNOWN", 0
-
-    latest = spy.iloc[-1]
-    slope_20 = spy["SMA50"].iloc[-1] - spy["SMA50"].iloc[-21]
+    latest = spy_df.iloc[-1]
+    slope_20 = spy_df["SMA50"].iloc[-1] - spy_df["SMA50"].iloc[-21]
 
     conditions = [
         latest["Close"] > latest["SMA50"],
@@ -92,15 +108,6 @@ def relative_strength_vs_spy(stock_df, spy_df):
     stock_return = stock_df["Close"].iloc[-1] / stock_df["Close"].iloc[-21] - 1
     spy_return = spy_df["Close"].iloc[-1] / spy_df["Close"].iloc[-21] - 1
     return stock_return - spy_return
-
-
-def get_spy_data():
-    spy = yf.download("SPY", period="1y", interval="1d", auto_adjust=False, progress=False)
-    if spy.empty:
-        return spy
-    if isinstance(spy.columns, pd.MultiIndex):
-        spy.columns = spy.columns.get_level_values(0)
-    return add_indicators(spy.dropna(subset=["Close"]))
 
 
 def score_setup(row, market_score):
@@ -174,17 +181,25 @@ def score_setup(row, market_score):
     return int(score)
 
 
-def scan_stock(ticker, spy_df):
+def scan_stock(ticker, spy_df, session_date):
     ticker = ticker.replace(".", "-")
     stock = yf.Ticker(ticker)
     df = stock.history(period="1y", interval="1d", auto_adjust=False)
     if df.empty or len(df) < 220:
         return None
 
-    df = add_indicators(df).dropna(subset=["SMA20", "SMA50", "SMA200", "ATR14", "VOL20"])
+    df = normalize_columns(df)
+    df = df[df.index.date <= session_date]
+    if len(df) < 220:
+        return None
+
+    df = add_indicators(df).dropna(
+        subset=["SMA20", "SMA50", "SMA200", "ATR14", "VOL20"]
+    )
     if len(df) < 30:
         return None
 
+    # Always use the latest completed candle on or before the SPY session date.
     prev = df.iloc[-2]
     cur = df.iloc[-1]
 
@@ -193,7 +208,6 @@ def scan_stock(ticker, spy_df):
     high = float(cur["High"])
     low = float(cur["Low"])
     atr = float(cur["ATR14"])
-    sma20 = float(cur["SMA20"])
     sma50 = float(cur["SMA50"])
     sma200 = float(cur["SMA200"])
 
@@ -213,7 +227,12 @@ def scan_stock(ticker, spy_df):
     sma200_slope = sma200 - float(df["SMA200"].iloc[-21])
     trend_spread = (sma50 - sma200) / sma200
 
-    if not (close > sma200 and sma50 > sma200 and sma50_slope > 0 and sma200_slope >= 0):
+    if not (
+        close > sma200
+        and sma50 > sma200
+        and sma50_slope > 0
+        and sma200_slope >= 0
+    ):
         return None
     if trend_spread < 0.02:
         return None
@@ -237,7 +256,12 @@ def scan_stock(ticker, spy_df):
     cur_bullish = close > open_
     body_engulfs = open_ <= float(prev["Close"]) and close >= float(prev["Open"])
     closes_above_prev_high = close > float(prev["High"])
-    bullish_engulfing = prev_bearish and cur_bullish and body_engulfs and closes_above_prev_high
+    bullish_engulfing = (
+        prev_bearish
+        and cur_bullish
+        and body_engulfs
+        and closes_above_prev_high
+    )
     if not bullish_engulfing:
         return None
 
@@ -292,6 +316,7 @@ def scan_stock(ticker, spy_df):
 
     row = {
         "ticker": ticker,
+        "session_date": session_date,
         "current_price": close,
         "stop": stop,
         "resistance": resistance,
@@ -318,10 +343,16 @@ def fmt_pct(value):
     return f"{value * 100:.1f}%"
 
 
-def generate_html(results, market_regime, market_score):
+def generate_html(results, market_regime, market_score, session_date):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
     if not results:
-        rows_html = "<div class='empty'>No setups passed all strict filters today.</div>"
+        rows_html = (
+            "<div class='empty'>"
+            "No setups passed all strict filters for the latest completed US "
+            f"trading session ({session_date})."
+            "</div>"
+        )
     else:
         cards = []
         for idx, row in enumerate(results, start=1):
@@ -337,6 +368,7 @@ def generate_html(results, market_regime, market_score):
                   </div>
                   <p class='summary'>Strong daily bullish-engulfing setup after a controlled pullback, with trend, volume, relative-strength and reward/risk confirmation.</p>
                   <div class='grid'>
+                    <div><b>Signal date</b><span>{row['session_date']}</span></div>
                     <div><b>Entry</b><span>${row['current_price']:.2f}</span></div>
                     <div><b>Stop</b><span>${row['stop']:.2f}</span></div>
                     <div><b>Resistance</b><span>${target:.2f}</span></div>
@@ -379,8 +411,13 @@ h1{{margin-bottom:6px}} .sub{{color:#6b7280;margin-top:0}}
 </head>
 <body>
 <h1>Strict Bullish Engulfing Scanner</h1>
-<p class='sub'>Daily S&P 500 scanner with hard filters before ranking.</p>
-<div class='regime'><b>Market regime:</b> {market_regime} &nbsp; | &nbsp; <b>SPY conditions:</b> {market_score}/3 &nbsp; | &nbsp; <b>Qualified setups:</b> {len(results)}</div>
+<p class='sub'>Daily S&amp;P 500 scanner with hard filters before ranking.</p>
+<div class='regime'>
+  <b>Latest completed US session:</b> {session_date}
+  &nbsp; | &nbsp; <b>Market regime:</b> {market_regime}
+  &nbsp; | &nbsp; <b>SPY conditions:</b> {market_score}/3
+  &nbsp; | &nbsp; <b>Qualified setups:</b> {len(results)}
+</div>
 {rows_html}
 </body>
 </html>"""
@@ -390,22 +427,34 @@ h1{{margin-bottom:6px}} .sub{{color:#6b7280;margin-top:0}}
 
 def main():
     print("Running strict bullish engulfing scanner...")
-    market_regime, market_score = get_market_regime()
+
+    # Get SPY first. Its latest daily row defines the latest completed US
+    # trading session. This is important when the workflow runs on Saturday,
+    # Sunday, a holiday, or any other non-trading day.
+    spy_df = get_spy_data()
+    session_date = get_latest_completed_session(spy_df)
+    if session_date is None:
+        print("Could not determine the latest completed US trading session.")
+        return
+
+    print(f"Scanning latest completed US trading session: {session_date}")
+
+    market_regime, market_score = get_market_regime(spy_df)
     if market_regime == "UNKNOWN":
         print("Could not determine SPY market regime; aborting.")
         return
+
     if market_regime == "RISK-OFF":
         print("Market regime is RISK-OFF. No long setups will be published.")
-        generate_html([], market_regime, market_score)
+        generate_html([], market_regime, market_score, session_date)
         return
 
-    spy_df = get_spy_data()
     tickers = get_sp500_tickers()
     results = []
 
     for ticker in tickers:
         try:
-            row = scan_stock(ticker, spy_df)
+            row = scan_stock(ticker, spy_df, session_date)
             if row is not None:
                 row["score"] = score_setup(row, market_score)
                 if row["score"] >= 70:
@@ -414,7 +463,7 @@ def main():
             print(f"Skipping {ticker}: {exc}")
 
     results.sort(key=lambda x: (x["score"], x["rr"], x["volume_ratio"]), reverse=True)
-    generate_html(results, market_regime, market_score)
+    generate_html(results, market_regime, market_score, session_date)
 
 
 if __name__ == "__main__":
