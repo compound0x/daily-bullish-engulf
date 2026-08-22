@@ -3,7 +3,10 @@ name: Strict Bullish Engulfing Scanner
 on:
   workflow_dispatch:
   schedule:
-    - cron: '10 0 * * 2-6'
+    # 21:10 UTC = 17:10 ET during US daylight saving time.
+    # The scanner itself selects the latest completed US session, so manual runs
+    # on weekends/holidays still evaluate the most recent completed trading day.
+    - cron: '10 21 * * 1-5'
 
 permissions:
   contents: write
